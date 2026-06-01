@@ -1,0 +1,177 @@
+/* ============================================================
+   CICERO — Design tokens
+   Camera-first monument recognition app
+   Accent: teal/sarcelle (bronze patina, sea, travel)
+   Neutrals: warm stone/sand (cultural warmth, not cold gray)
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Hanken+Grotesk:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ---- Brand accent: teal / sarcelle ---- */
+  --teal-50:  #E6F6F3;
+  --teal-100: #C6ECE6;
+  --teal-300: #5FD3C5;
+  --teal-400: #2BBFAE;
+  --teal-500: #0E9B8E;   /* primary */
+  --teal-600: #0A7D72;
+  --teal-700: #075E56;
+  --teal-800: #06443F;
+
+  /* ---- Warm secondary: terracotta + ochre (sunlit stone) ---- */
+  --terra-400: #E89466;
+  --terra-500: #D67A48;
+  --terra-600: #B85F33;
+  --ochre-400: #E0B24A;
+  --ochre-500: #C99A3A;
+
+  /* ---- Confidence semantics ---- */
+  --conf-high: var(--teal-500);    /* >= 90% */
+  --conf-mid:  var(--ochre-500);   /* 70-89% */
+  --conf-low:  var(--terra-500);   /* < 70%, "probablement..." */
+
+  /* radii */
+  --r-pill: 999px;
+  --r-tile: 18px;
+  --r-card: 26px;
+  --r-sheet: 34px;
+  --r-chip: 14px;
+
+  /* spacing rhythm */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-7: 32px; --sp-8: 40px;
+
+  /* type families */
+  --font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* easing */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ============ LIGHT THEME (warm paper) ============ */
+[data-theme="light"] {
+  --bg: #F4F0E8;            /* warm sand paper */
+  --bg-2: #EBE5D9;
+  --surface: #FFFFFF;
+  --surface-2: #FBF8F2;
+  --ink: #1E1B16;           /* warm near-black */
+  --ink-2: #57514705;
+  --ink-muted: #6E675B;
+  --ink-faint: #9A9282;
+  --hairline: rgba(30,27,22,0.10);
+  --hairline-strong: rgba(30,27,22,0.16);
+
+  /* glass over camera (light scenes) */
+  --glass-bg: rgba(255,255,255,0.62);
+  --glass-border: rgba(255,255,255,0.7);
+  --glass-shadow: 0 8px 30px rgba(40,34,24,0.16);
+  --glass-ink: #1E1B16;
+  --glass-ink-muted: rgba(30,27,22,0.62);
+
+  --accent: var(--teal-600);
+  --accent-ink: #FFFFFF;
+  --accent-soft: var(--teal-50);
+}
+
+/* ============ DARK THEME (warm charcoal) ============ */
+[data-theme="dark"] {
+  --bg: #16140F;            /* warm charcoal */
+  --bg-2: #100E0A;
+  --surface: #211E18;
+  --surface-2: #2A2620;
+  --ink: #F4F0E7;
+  --ink-2: #C9C2B4;
+  --ink-muted: #A79E8D;
+  --ink-faint: #756E60;
+  --hairline: rgba(244,240,231,0.12);
+  --hairline-strong: rgba(244,240,231,0.20);
+
+  /* glass over camera (dark/any scenes) */
+  --glass-bg: rgba(28,25,20,0.52);
+  --glass-border: rgba(255,255,255,0.16);
+  --glass-shadow: 0 8px 34px rgba(0,0,0,0.42);
+  --glass-ink: #F8F5EE;
+  --glass-ink-muted: rgba(248,245,238,0.7);
+
+  --accent: var(--teal-400);
+  --accent-ink: #06322E;
+  --accent-soft: rgba(43,191,174,0.16);
+}
+
+/* ============ base utilities ============ */
+* { box-sizing: border-box; }
+
+.cic-ui { font-family: var(--font-ui); }
+.cic-display { font-family: var(--font-display); }
+.cic-mono { font-family: var(--font-mono); }
+
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Frosted glass surface (works in both themes via tokens) */
+.glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+  backdrop-filter: blur(22px) saturate(165%);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: var(--glass-shadow),
+              inset 0 1px 0 rgba(255,255,255,0.22);
+}
+
+/* Soft solid surface (sheets, cards on solid bg) */
+.surface-card {
+  background: var(--surface);
+  border: 0.5px solid var(--hairline);
+}
+
+/* focus ring for a11y */
+.focusable:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ============ animations ============ */
+@keyframes cic-scan-sweep {
+  0%   { transform: translateY(-120%); opacity: 0; }
+  18%  { opacity: 0.9; }
+  82%  { opacity: 0.9; }
+  100% { transform: translateY(120%); opacity: 0; }
+}
+@keyframes cic-pulse-ring {
+  0%   { transform: scale(0.85); opacity: 0.7; }
+  70%  { transform: scale(1.5);  opacity: 0; }
+  100% { transform: scale(1.5);  opacity: 0; }
+}
+@keyframes cic-bracket-breathe {
+  0%,100% { opacity: 0.55; }
+  50%     { opacity: 1; }
+}
+@keyframes cic-sheet-rise {
+  from { transform: translateY(105%); }
+  to   { transform: translateY(0); }
+}
+@keyframes cic-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes cic-pop-in {
+  0%   { opacity: 0; transform: scale(0.8); }
+  60%  { transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes cic-dots {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40%           { opacity: 1; transform: translateY(-3px); }
+}
+@keyframes cic-spin { to { transform: rotate(360deg); } }
+@keyframes cic-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+}
