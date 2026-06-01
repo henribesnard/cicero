@@ -6,7 +6,11 @@ from app.main import app
 def test_get_monument_200() -> None:
     client = TestClient(app)
 
-    r = client.get("/v1/monuments/notre-dame", params={"lang": "en"})
+    r = client.get(
+        "/v1/monuments/notre-dame",
+        params={"lang": "en"},
+        headers={"Authorization": "Bearer dev-token"},
+    )
 
     assert r.status_code == 200
     assert r.headers["x-request-id"]
@@ -26,7 +30,10 @@ def test_get_monument_200() -> None:
 def test_get_monument_404() -> None:
     client = TestClient(app)
 
-    r = client.get("/v1/monuments/unknown-id")
+    r = client.get(
+        "/v1/monuments/unknown-id",
+        headers={"Authorization": "Bearer dev-token"},
+    )
 
     assert r.status_code == 404
     assert r.headers["x-request-id"]
