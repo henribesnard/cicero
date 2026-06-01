@@ -9,6 +9,7 @@ def test_get_monument_200() -> None:
     r = client.get("/v1/monuments/notre-dame", params={"lang": "en"})
 
     assert r.status_code == 200
+    assert r.headers["x-request-id"]
     data = r.json()
     assert data["request_id"]
     assert data["monument_id"] == "notre-dame"
@@ -28,4 +29,6 @@ def test_get_monument_404() -> None:
     r = client.get("/v1/monuments/unknown-id")
 
     assert r.status_code == 404
+    assert r.headers["x-request-id"]
+    assert r.json()["request_id"]
     assert r.json()["detail"] == "Monument not found"
