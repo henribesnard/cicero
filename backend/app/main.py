@@ -1,3 +1,4 @@
+import math
 import os
 import time
 from collections import defaultdict, deque
@@ -11,6 +12,10 @@ app = FastAPI(title="Cicero API", version="0.1.0")
 AUTH_BEARER_TOKEN = os.getenv("CICERO_API_BEARER_TOKEN", "dev-token")
 RATE_LIMIT_MAX_REQUESTS = int(os.getenv("CICERO_RATE_LIMIT_MAX_REQUESTS", "30"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("CICERO_RATE_LIMIT_WINDOW_SECONDS", "60"))
+SUPPORTED_MODEL_VERSION = "vision-lite-1.0.0"
+EMBEDDING_DIMENSION = 256
+HIGH_CONFIDENCE_THRESHOLD = 0.80
+LOW_CONFIDENCE_THRESHOLD = 0.50
 _request_windows: dict[str, deque[float]] = defaultdict(deque)
 
 
@@ -80,6 +85,21 @@ MONUMENTS = {
     }
 }
 
+REFERENCE_EMBEDDINGS = {
+    "notre-dame": [1.0] + [0.0] * (EMBEDDING_DIMENSION - 1),
+}
+
+CITY_PACKAGES = {
+    "paris": {
+        "city_id": "paris",
+        "model_version": SUPPORTED_MODEL_VERSION,
+        "package_url": "https://static.cicero.local/packages/paris-vision-lite-1.0.0.zip",
+        "size_bytes": 24_576_000,
+        "checksum_sha256": "local-dev-placeholder",
+        "monument_count": len(MONUMENTS),
+    }
+}
+
 
 @app.get("/health")
 def health(request: Request) -> dict:
@@ -105,4 +125,101 @@ def get_monument(request: Request, monument_id: str, lang: str = Query(default="
         "description": translation["description"],
         "practical_info": monument["practical_info"],
         "media": monument["media"],
+    }
+
+
+def _validate_recognize_payload(payload: object) -> dict:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid recognize payload")
+
+    embedding = payload.get("embedding")
+    model_version = payload.get("model_version")
+
+    if model_version != SUPPORTED_MODEL_VERSION:
+        raise HTTPException(status_code=409, detail="Incompatible model_version")
+
+    if not isinstance(embedding, list) or len(embedding) != EMBEDDING_DIMENSION:
+        raise HTTPException(status_code=400, detail="embedding must contain 256 numbers")
+
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in embedding):
+        raise HTTPException(status_code=400, detail="embedding must contain only numbers")
+
+    location = payload.get("location")
+    if not isinstance(location, dict):
+        raise HTTPException(status_code=400, detail="location is required")
+
+    lat = location.get("lat")
+    lng = location.get("lng")
+    if (
+        not isinstance(lat, (int, float))
+        or isinstance(lat, bool)
+        or not isinstance(lng, (int, float))
+        or isinstance(lng, bool)
+    ):
+        raise HTTPException(status_code=400, detail="location.lat and location.lng must be numbers")
+
+    heading_deg = payload.get("heading_deg")
+    if not isinstance(heading_deg, (int, float)) or isinstance(heading_deg, bool) or not 0 <= heading_deg <= 360:
+        raise HTTPException(status_code=400, detail="heading_deg must be between 0 and 360")
+
+    radius_m = payload.get("radius_m", 300)
+    if not isinstance(radius_m, (int, float)) or isinstance(radius_m, bool) or radius_m <= 0:
+        raise HTTPException(status_code=400, detail="radius_m must be positive")
+
+    return payload
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return max(0.0, min(1.0, dot / (norm_a * norm_b)))
+
+
+@app.post("/v1/recognize")
+async def recognize(request: Request) -> dict:
+    payload = _validate_recognize_payload(await request.json())
+    embedding = payload["embedding"]
+
+    scored_matches = []
+    for monument_id, reference_embedding in REFERENCE_EMBEDDINGS.items():
+        confidence = _cosine_similarity(embedding, reference_embedding)
+        if confidence >= LOW_CONFIDENCE_THRESHOLD:
+            monument = MONUMENTS[monument_id]
+            translation = monument["translations"]["fr"]
+            scored_matches.append(
+                {
+                    "monument_id": monument_id,
+                    "name": translation["name"],
+                    "confidence": round(confidence, 4),
+                }
+            )
+
+    scored_matches.sort(key=lambda match: match["confidence"], reverse=True)
+
+    if not scored_matches:
+        status = "not_found"
+    elif scored_matches[0]["confidence"] >= HIGH_CONFIDENCE_THRESHOLD:
+        status = "matched"
+    else:
+        status = "low_confidence"
+
+    return {
+        "request_id": request.state.request_id,
+        "matches": scored_matches,
+        "status": status,
+    }
+
+
+@app.get("/v1/cities/{city_id}/package")
+def get_city_package(request: Request, city_id: str) -> dict:
+    package = CITY_PACKAGES.get(city_id)
+    if package is None:
+        raise HTTPException(status_code=404, detail="City package not found")
+
+    return {
+        "request_id": request.state.request_id,
+        **package,
     }

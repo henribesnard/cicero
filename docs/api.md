@@ -1,51 +1,103 @@
 # Cicero API — Spécification vivante
 
 ## Version
-- v0.3 (API-1 complétée sur endpoints actifs: `request_id` + Auth Bearer + rate limiting)
-
-## Endpoints actifs
-- `GET /health`
-  - Réponse: `{ "request_id": "<uuid>", "status": "ok" }`
-  - Header: `X-Request-Id`
-  - Auth: non requise (sonde technique)
-
-- `GET /v1/monuments/{id}?lang=<code>`
-  - Réponse 200: fiche monument + `request_id`
-  - Header: `X-Request-Id`
-  - Auth: **Bearer requise**
-
-## Gestion d'erreurs
-Toutes les erreurs applicatives renvoient:
-- `request_id`
-- `detail`
-- header `X-Request-Id`
-
-Exemple 401:
-```json
-{
-  "request_id": "f8fdb62b-8d78-4d2d-9f3a-9fb76f01c1f4",
-  "detail": "Unauthorized"
-}
-```
-
-Exemple 429:
-```json
-{
-  "request_id": "a7a1f758-4ac1-4313-97e5-10ef5f58b618",
-  "detail": "Rate limit exceeded"
-}
-```
+- v0.4 (API-2 `POST /v1/recognize` + API-5 `GET /v1/cities/{id}/package`)
 
 ## Règles transverses
-- Auth Bearer: header `Authorization: Bearer <token>`
-  - Token actuel: via variable d'environnement `CICERO_API_BEARER_TOKEN` (fallback dev local: `dev-token`)
-- Rate limiting (endpoints `/v1/*`):
-  - Fenêtre: `CICERO_RATE_LIMIT_WINDOW_SECONDS` (défaut `60`)
-  - Max requêtes: `CICERO_RATE_LIMIT_MAX_REQUESTS` (défaut `30`)
-- `request_id` dans toutes les réponses des endpoints actifs
-- 409 si `model_version` incompatible: non implémenté (porté par API-2)
+- `GET /health` est public.
+- Tous les endpoints `/v1/*` exigent un header `Authorization` avec un jeton Bearer.
+  - Token local de développement: variable `CICERO_API_BEARER_TOKEN`, fallback `dev-token`.
+- Rate limiting sur `/v1/*`:
+  - `CICERO_RATE_LIMIT_WINDOW_SECONDS` (défaut `60`)
+  - `CICERO_RATE_LIMIT_MAX_REQUESTS` (défaut `30`)
+- Chaque réponse contient `request_id` et le header `X-Request-Id`.
+- Les erreurs applicatives renvoient `{ "request_id": "<uuid>", "detail": "..." }`.
+
+## Endpoints actifs
+
+### `GET /health`
+- Auth: non requise.
+- Réponse 200:
+```json
+{
+  "request_id": "<uuid>",
+  "status": "ok"
+}
+```
+
+### `GET /v1/monuments/{id}?lang=<code>`
+- Auth: Bearer requise.
+- Réponse 200: fiche monument complète.
+```json
+{
+  "request_id": "<uuid>",
+  "monument_id": "notre-dame",
+  "name": "Notre-Dame de Paris",
+  "type": "cathedral",
+  "location": { "lat": 48.853, "lng": 2.3499 },
+  "year_built": 1163,
+  "architect": "Maurice de Sully",
+  "description": "Cathédrale gothique emblématique de Paris.",
+  "practical_info": { "opening_hours": "09:00-18:00", "ticket": "free" },
+  "media": [{ "type": "image", "url": "https://example.com/notre-dame.jpg" }]
+}
+```
+- Erreurs: `404 Monument not found`.
+
+### `POST /v1/recognize`
+- Story: API-2.
+- Auth: Bearer requise.
+- Modèle supporté: `vision-lite-1.0.0`.
+- Dimension d'empreinte: `256`.
+- Seuils actuels:
+  - `matched`: meilleur score `>= 0.80`
+  - `low_confidence`: meilleur score `>= 0.50` et `< 0.80`
+  - `not_found`: aucun match `>= 0.50`
+- Requête:
+```json
+{
+  "embedding": [1.0, 0.0],
+  "model_version": "vision-lite-1.0.0",
+  "location": { "lat": 48.853, "lng": 2.3499, "accuracy_m": 8 },
+  "heading_deg": 215,
+  "radius_m": 300
+}
+```
+> `embedding` doit contenir exactement 256 nombres; l'exemple ci-dessus est abrégé.
+- Réponse 200:
+```json
+{
+  "request_id": "<uuid>",
+  "status": "matched",
+  "matches": [
+    {
+      "monument_id": "notre-dame",
+      "name": "Notre-Dame de Paris",
+      "confidence": 1.0
+    }
+  ]
+}
+```
+- Erreurs:
+  - `400` payload/embedding/localisation/cap invalides.
+  - `409 Incompatible model_version` si la version modèle n'est pas supportée.
+
+### `GET /v1/cities/{id}/package`
+- Story: API-5.
+- Auth: Bearer requise.
+- Réponse 200:
+```json
+{
+  "request_id": "<uuid>",
+  "city_id": "paris",
+  "model_version": "vision-lite-1.0.0",
+  "package_url": "https://static.cicero.local/packages/paris-vision-lite-1.0.0.zip",
+  "size_bytes": 24576000,
+  "checksum_sha256": "local-dev-placeholder",
+  "monument_count": 1
+}
+```
+- Erreurs: `404 City package not found`.
 
 ## Endpoints à implémenter (ordre backlog)
-1. `POST /v1/recognize` (API-2, J2)
-2. `POST /v1/chat` (API-4, J2)
-3. `GET /v1/cities/{id}/package` (API-5, J2)
+1. `POST /v1/chat` (API-4, J2)
