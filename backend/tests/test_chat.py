@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import CHAT_HISTORY_MAX_MESSAGES, app
 
 TOKEN_HEADER = {"Authorization": "Bearer dev-token"}
 
@@ -74,6 +74,24 @@ def test_chat_refuses_to_invent_when_no_data_matches() -> None:
     data = r.json()
     assert data["answer"] == "Je ne dispose pas de donnée fiable sur ce point pour Notre-Dame de Paris."
     assert data["sources"] == []
+
+
+def test_chat_bounds_history_and_reports_session_only_retention() -> None:
+    client = TestClient(app)
+    history = [{"role": "user", "content": f"message {i}"} for i in range(CHAT_HISTORY_MAX_MESSAGES + 3)]
+    history.append({"role": "user", "content": "Parlons de la date de construction."})
+
+    r = client.post("/v1/chat", json=chat_payload(message="Quand ?", history=history), headers=TOKEN_HEADER)
+
+    assert r.status_code == 200
+    data = r.json()
+    assert "1163" in data["answer"]
+    assert data["privacy"] == {
+        "history_retention": "session_only_client_side",
+        "history_received": CHAT_HISTORY_MAX_MESSAGES + 4,
+        "history_used": CHAT_HISTORY_MAX_MESSAGES,
+        "history_max_messages": CHAT_HISTORY_MAX_MESSAGES,
+    }
 
 
 def test_chat_rejects_unknown_monument() -> None:

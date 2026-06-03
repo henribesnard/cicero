@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.travel_log import TravelLog
+from app.travel_log import TRAVEL_LOG_RETENTION_DAYS, TravelLog
 
 
 def test_record_scan_keeps_monument_date_score_and_status() -> None:
@@ -43,3 +43,17 @@ def test_record_scan_rejects_invalid_values() -> None:
         log.record_scan("notre-dame", 0.8, status="pending")
     with pytest.raises(ValueError, match="sort must be asc or desc"):
         log.list_scans(sort="newest")
+
+
+def test_purge_before_and_clear_support_local_privacy_deletion() -> None:
+    log = TravelLog()
+    log.record_scan("old", 0.8, scanned_at="2025-01-01T00:00:00Z")
+    log.record_scan("kept", 0.9, scanned_at="2026-01-01T00:00:00Z")
+
+    removed = log.purge_before("2025-06-01T00:00:00Z")
+
+    assert TRAVEL_LOG_RETENTION_DAYS == 365
+    assert removed == 1
+    assert [entry["monument_id"] for entry in log.list_scans()] == ["kept"]
+    assert log.clear() == 1
+    assert log.list_scans() == []

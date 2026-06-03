@@ -18,6 +18,8 @@ HIGH_CONFIDENCE_THRESHOLD = 0.80
 LOW_CONFIDENCE_THRESHOLD = 0.50
 DEFAULT_CONTENT_LANG = "fr"
 SUPPORTED_CONTENT_LANGS = ("fr", "en")
+CHAT_HISTORY_MAX_MESSAGES = 12
+CHAT_HISTORY_RETENTION = "session_only_client_side"
 _request_windows: dict[str, deque[float]] = defaultdict(deque)
 
 
@@ -199,6 +201,11 @@ def _source(monument_id: str, field: str, lang: str) -> dict:
     return {"monument_id": monument_id, "field": field, "lang": lang}
 
 
+def _bounded_chat_history(history: list[dict]) -> list[dict]:
+    """Keep only the recent client-provided context used for answer generation."""
+    return history[-CHAT_HISTORY_MAX_MESSAGES:]
+
+
 def _build_grounded_chat_answer(
     monument_id: str, monument: dict, message: str, history: list[dict], lang: str
 ) -> tuple[str, list[dict]]:
@@ -242,17 +249,24 @@ async def chat(request: Request) -> dict:
     if monument is None:
         raise HTTPException(status_code=404, detail="Monument not found")
 
+    bounded_history = _bounded_chat_history(payload.get("history", []))
     answer, sources = _build_grounded_chat_answer(
         monument_id=monument_id,
         monument=monument,
         message=payload["message"],
-        history=payload.get("history", []),
+        history=bounded_history,
         lang=payload.get("lang", "fr"),
     )
     return {
         "request_id": request.state.request_id,
         "answer": answer,
         "sources": sources,
+        "privacy": {
+            "history_retention": CHAT_HISTORY_RETENTION,
+            "history_received": len(payload.get("history", [])),
+            "history_used": len(bounded_history),
+            "history_max_messages": CHAT_HISTORY_MAX_MESSAGES,
+        },
     }
 
 

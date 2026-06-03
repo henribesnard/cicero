@@ -1,7 +1,7 @@
 # Cicero API — Spécification vivante
 
 ## Version
-- v0.8 (FIC-2 fiches multilingues + USR-1 carnet local)
+- v1.0 (OFF-3 gestion locale des paquets hors-ligne)
 
 ## Règles transverses
 - `GET /health` est public.
@@ -176,6 +176,31 @@ Comportements locaux validés:
 - fiches locales multilingues: `lang` demandé respecté si disponible, sinon fallback explicite en `fr`;
 - chat explicitement indisponible hors-ligne via `capabilities.chat=false`.
 
+## Contrat gestion locale des paquets OFF-3
+
+Le client maintient un registre local des paquets ville téléchargés à partir du bundle OFF-2.
+
+Entrée logique installée:
+```json
+{
+  "city_id": "paris",
+  "package_version": "2026.06.03-1",
+  "model_version": "vision-lite-1.0.0",
+  "lang": "fr",
+  "size_bytes": 24576000,
+  "installed_at": "2026-06-03T09:00:00Z",
+  "monument_count": 1,
+  "update_available": false
+}
+```
+
+Comportements locaux validés:
+- liste triée des villes téléchargées;
+- calcul de `used_bytes`, `quota_bytes`, `available_bytes` pour affichage stockage;
+- suppression locale d'un paquet ville par `city_id`;
+- marquage `update_available=true` avec `latest_package_version` si le manifeste serveur annonce une version plus récente;
+- rejet explicite si le paquet dépasse le quota local ou si la ville n'est pas installée.
+
 ## Contrat carnet local USR-1
 
 Le carnet de voyage est un modèle local côté client, validé pour enregistrer chaque scan et lister l'historique.
@@ -193,7 +218,8 @@ Entrée logique créée à chaque scan:
 Contraintes validées:
 - `score` borné entre `0` et `1`, arrondi à 4 décimales;
 - `status` dans `matched`, `low_confidence`, `not_found`;
-- liste consultable triée par date en ordre descendant par défaut, ou ascendant sur demande.
+- liste consultable triée par date en ordre descendant par défaut, ou ascendant sur demande;
+- politique SEC-2 locale: conservation cible `365` jours, `purge_before(cutoff)` supprime les entrées antérieures, `clear()` supprime tout le carnet utilisateur.
 
 ### `POST /v1/chat`
 - Stories: API-4 / IA-1.
@@ -202,7 +228,8 @@ Contraintes validées:
 - Comportement garanti:
   - réponse fondée sur les champs récupérés du monument;
   - `sources` liste les champs utilisés;
-  - si aucune donnée fiable ne correspond à la question, l'assistant le dit et renvoie `sources: []`.
+  - si aucune donnée fiable ne correspond à la question, l'assistant le dit et renvoie `sources: []`;
+  - SEC-2: historique non persisté serveur, seulement les 12 derniers messages client sont utilisés, métadonnées `privacy` renvoyées.
 - Requête:
 ```json
 {
@@ -223,7 +250,13 @@ Contraintes validées:
   "sources": [
     { "monument_id": "notre-dame", "field": "description", "lang": "fr" },
     { "monument_id": "notre-dame", "field": "type", "lang": "fr" }
-  ]
+  ],
+  "privacy": {
+    "history_retention": "session_only_client_side",
+    "history_received": 2,
+    "history_used": 2,
+    "history_max_messages": 12
+  }
 }
 ```
 - Erreurs:

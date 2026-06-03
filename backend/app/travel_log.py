@@ -3,6 +3,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 
+TRAVEL_LOG_RETENTION_DAYS = 365
+
+
 @dataclass(frozen=True)
 class TravelLogEntry:
     monument_id: str
@@ -57,6 +60,24 @@ class TravelLog:
                 reverse=sort == "desc",
             )
         ]
+
+    def purge_before(self, cutoff: datetime | str) -> int:
+        """Delete carnet entries older than ``cutoff`` and return the count removed.
+
+        SEC-2 requires explicit retention/deletion behavior before any account sync.
+        This keeps deletion local, deterministic and easy for the mobile client to run
+        on startup or when the user changes privacy settings.
+        """
+        cutoff_iso = _to_utc_iso(cutoff)
+        before_count = len(self._entries)
+        self._entries = [entry for entry in self._entries if entry.scanned_at >= cutoff_iso]
+        return before_count - len(self._entries)
+
+    def clear(self) -> int:
+        """Delete the full local carnet and return the count removed."""
+        before_count = len(self._entries)
+        self._entries.clear()
+        return before_count
 
 
 def _to_utc_iso(value: datetime | str | None) -> str:
