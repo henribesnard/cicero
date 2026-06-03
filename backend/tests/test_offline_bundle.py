@@ -27,6 +27,21 @@ def test_build_offline_bundle_contains_local_recognition_and_cards() -> None:
     assert bundle["monument_cards"][0]["description"] == "Cathédrale gothique emblématique de Paris."
 
 
+def test_build_offline_bundle_respects_language_and_fallback() -> None:
+    english = build_offline_bundle("paris", lang="en")
+    fallback = build_offline_bundle("paris", lang="es")
+
+    assert english["monument_cards"][0]["name"] == "Notre-Dame Cathedral"
+    assert english["monument_cards"][0]["description"] == "Iconic Gothic cathedral in Paris."
+    assert english["monument_cards"][0]["lang"] == "en"
+    assert english["monument_cards"][0]["fallback_lang"] is None
+
+    assert fallback["lang"] == "es"
+    assert fallback["monument_cards"][0]["name"] == "Notre-Dame de Paris"
+    assert fallback["monument_cards"][0]["lang"] == "fr"
+    assert fallback["monument_cards"][0]["fallback_lang"] == "fr"
+
+
 def test_offline_recognition_and_card_read_work_without_api_client() -> None:
     bundle = build_offline_bundle("paris")
 

@@ -16,6 +16,8 @@ SUPPORTED_MODEL_VERSION = "vision-lite-1.0.0"
 EMBEDDING_DIMENSION = 256
 HIGH_CONFIDENCE_THRESHOLD = 0.80
 LOW_CONFIDENCE_THRESHOLD = 0.50
+DEFAULT_CONTENT_LANG = "fr"
+SUPPORTED_CONTENT_LANGS = ("fr", "en")
 _request_windows: dict[str, deque[float]] = defaultdict(deque)
 
 
@@ -122,11 +124,14 @@ CITY_PACKAGES = {
 
 
 def _translated_monument(monument: dict, lang: str) -> dict:
-    translation = monument["translations"].get(lang) or monument["translations"]["fr"]
+    requested_lang = lang.strip().lower()
+    translation = monument["translations"].get(requested_lang) or monument["translations"][DEFAULT_CONTENT_LANG]
+    effective_lang = requested_lang if requested_lang in monument["translations"] else DEFAULT_CONTENT_LANG
     return {
         "name": translation["name"],
         "description": translation["description"],
-        "lang": lang if lang in monument["translations"] else "fr",
+        "lang": effective_lang,
+        "fallback_lang": None if effective_lang == requested_lang else DEFAULT_CONTENT_LANG,
     }
 
 
@@ -152,6 +157,9 @@ def get_monument(request: Request, monument_id: str, lang: str = Query(default="
         "year_built": monument["year_built"],
         "architect": monument["architect"],
         "description": translation["description"],
+        "lang": translation["lang"],
+        "fallback_lang": translation["fallback_lang"],
+        "available_langs": list(SUPPORTED_CONTENT_LANGS),
         "practical_info": monument["practical_info"],
         "media": monument["media"],
     }

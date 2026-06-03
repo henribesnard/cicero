@@ -1,7 +1,7 @@
 # Cicero API — Spécification vivante
 
 ## Version
-- v0.7 (OFF-2 contrat de bundle local hors-ligne)
+- v0.8 (FIC-2 fiches multilingues + USR-1 carnet local)
 
 ## Règles transverses
 - `GET /health` est public.
@@ -27,7 +27,9 @@
 
 ### `GET /v1/monuments/{id}?lang=<code>`
 - Auth: Bearer requise.
-- Réponse 200: fiche monument complète.
+- Réponse 200: fiche monument complète dans la langue demandée si disponible.
+- Langues de contenu supportées actuellement: `fr`, `en`.
+- Fallback: si `lang` n'est pas disponible, la fiche est renvoyée en `fr` avec `fallback_lang: "fr"`.
 ```json
 {
   "request_id": "<uuid>",
@@ -38,6 +40,9 @@
   "year_built": 1163,
   "architect": "Maurice de Sully",
   "description": "Cathédrale gothique emblématique de Paris.",
+  "lang": "fr",
+  "fallback_lang": null,
+  "available_langs": ["fr", "en"],
   "practical_info": { "opening_hours": "09:00-18:00", "ticket": "free" },
   "media": [{ "type": "image", "url": "https://example.com/notre-dame.jpg" }]
 }
@@ -131,6 +136,7 @@ Structure logique validée par tests:
   "city_id": "paris",
   "package_version": "2026.06.03-1",
   "model_version": "vision-lite-1.0.0",
+  "requested_lang": "fr",
   "lang": "fr",
   "capabilities": {
     "recognition": true,
@@ -156,7 +162,8 @@ Structure logique validée par tests:
       "description": "Cathédrale gothique emblématique de Paris.",
       "practical_info": { "opening_hours": "09:00-18:00", "ticket": "free" },
       "media": [{ "type": "image", "url": "https://example.com/notre-dame.jpg" }],
-      "lang": "fr"
+      "lang": "fr",
+      "fallback_lang": null
     }
   ]
 }
@@ -166,7 +173,27 @@ Structure logique validée par tests:
 Comportements locaux validés:
 - reconnaissance depuis `embeddings_index` avec les mêmes statuts que `POST /v1/recognize`: `matched`, `low_confidence`, `not_found`;
 - lecture de fiche depuis `monument_cards` sans appel API;
+- fiches locales multilingues: `lang` demandé respecté si disponible, sinon fallback explicite en `fr`;
 - chat explicitement indisponible hors-ligne via `capabilities.chat=false`.
+
+## Contrat carnet local USR-1
+
+Le carnet de voyage est un modèle local côté client, validé pour enregistrer chaque scan et lister l'historique.
+
+Entrée logique créée à chaque scan:
+```json
+{
+  "monument_id": "notre-dame",
+  "scanned_at": "2026-06-03T08:30:00Z",
+  "score": 0.9235,
+  "status": "matched"
+}
+```
+
+Contraintes validées:
+- `score` borné entre `0` et `1`, arrondi à 4 décimales;
+- `status` dans `matched`, `low_confidence`, `not_found`;
+- liste consultable triée par date en ordre descendant par défaut, ou ascendant sur demande.
 
 ### `POST /v1/chat`
 - Stories: API-4 / IA-1.

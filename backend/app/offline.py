@@ -4,6 +4,7 @@ from typing import Any
 
 from app.main import (
     CITY_PACKAGES,
+    DEFAULT_CONTENT_LANG,
     EMBEDDING_DIMENSION,
     HIGH_CONFIDENCE_THRESHOLD,
     LOW_CONFIDENCE_THRESHOLD,
@@ -26,8 +27,9 @@ def build_offline_bundle(city_id: str, lang: str = "fr") -> dict[str, Any]:
     cards = []
     embeddings = []
     for monument_id, monument in MONUMENTS.items():
-        translation = monument["translations"].get(lang) or monument["translations"]["fr"]
-        effective_lang = lang if lang in monument["translations"] else "fr"
+        requested_lang = lang.strip().lower()
+        translation = monument["translations"].get(requested_lang) or monument["translations"][DEFAULT_CONTENT_LANG]
+        effective_lang = requested_lang if requested_lang in monument["translations"] else DEFAULT_CONTENT_LANG
         cards.append(
             {
                 "monument_id": monument_id,
@@ -40,6 +42,7 @@ def build_offline_bundle(city_id: str, lang: str = "fr") -> dict[str, Any]:
                 "practical_info": deepcopy(monument["practical_info"]),
                 "media": deepcopy(monument["media"]),
                 "lang": effective_lang,
+                "fallback_lang": None if effective_lang == requested_lang else DEFAULT_CONTENT_LANG,
             }
         )
         embeddings.append(
@@ -54,7 +57,8 @@ def build_offline_bundle(city_id: str, lang: str = "fr") -> dict[str, Any]:
         "city_id": package["city_id"],
         "package_version": package["package_version"],
         "model_version": SUPPORTED_MODEL_VERSION,
-        "lang": lang,
+        "requested_lang": lang,
+        "lang": lang.strip().lower(),
         "capabilities": {
             "recognition": True,
             "monument_cards": True,
