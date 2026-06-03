@@ -92,11 +92,31 @@ REFERENCE_EMBEDDINGS = {
 CITY_PACKAGES = {
     "paris": {
         "city_id": "paris",
+        "city_name": "Paris",
+        "country": "FR",
+        "package_version": "2026.06.03-1",
         "model_version": SUPPORTED_MODEL_VERSION,
         "package_url": "https://static.cicero.local/packages/paris-vision-lite-1.0.0.zip",
         "size_bytes": 24_576_000,
-        "checksum_sha256": "local-dev-placeholder",
+        "checksum_sha256": "f0b2d67ef13f7e759bba5b0916d2d8f56840db1e46b4e7d0f5d33c6b1f4b43b7",
         "monument_count": len(MONUMENTS),
+        "generated_at": "2026-06-03T00:00:00Z",
+        "components": [
+            {
+                "kind": "embeddings_index",
+                "schema_version": "embeddings-index-v1",
+                "path": "index/embeddings.jsonl",
+                "size_bytes": 8_192_000,
+                "checksum_sha256": "c580fb7f299af3aa6c1dbe315ab2d609c871d0bde4fe2fc999c7ba5091f8b55f",
+            },
+            {
+                "kind": "monument_cards",
+                "schema_version": "monument-cards-v1",
+                "path": "content/monuments.fr.json",
+                "size_bytes": 16_384_000,
+                "checksum_sha256": "ee67659b3b2d994de528e3ad920fc96f35594d0a8044c2b1075c34eb12f8f9ba",
+            },
+        ],
     }
 }
 

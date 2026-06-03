@@ -1,7 +1,7 @@
 # Cicero API — Spécification vivante
 
 ## Version
-- v0.5 (API-4 `POST /v1/chat` RAG minimal sourcé)
+- v0.6 (OFF-1 manifeste enrichi du paquet hors-ligne)
 
 ## Règles transverses
 - `GET /health` est public.
@@ -83,18 +83,39 @@
   - `409 Incompatible model_version` si la version modèle n'est pas supportée.
 
 ### `GET /v1/cities/{id}/package`
-- Story: API-5.
+- Stories: API-5 / OFF-1.
 - Auth: Bearer requise.
+- Le manifeste permet au client d'afficher la taille avant téléchargement et de stocker localement l'index d'empreintes + les fiches.
 - Réponse 200:
 ```json
 {
   "request_id": "<uuid>",
   "city_id": "paris",
+  "city_name": "Paris",
+  "country": "FR",
+  "package_version": "2026.06.03-1",
   "model_version": "vision-lite-1.0.0",
   "package_url": "https://static.cicero.local/packages/paris-vision-lite-1.0.0.zip",
   "size_bytes": 24576000,
-  "checksum_sha256": "local-dev-placeholder",
-  "monument_count": 1
+  "checksum_sha256": "f0b2d67ef13f7e759bba5b0916d2d8f56840db1e46b4e7d0f5d33c6b1f4b43b7",
+  "monument_count": 1,
+  "generated_at": "2026-06-03T00:00:00Z",
+  "components": [
+    {
+      "kind": "embeddings_index",
+      "schema_version": "embeddings-index-v1",
+      "path": "index/embeddings.jsonl",
+      "size_bytes": 8192000,
+      "checksum_sha256": "c580fb7f299af3aa6c1dbe315ab2d609c871d0bde4fe2fc999c7ba5091f8b55f"
+    },
+    {
+      "kind": "monument_cards",
+      "schema_version": "monument-cards-v1",
+      "path": "content/monuments.fr.json",
+      "size_bytes": 16384000,
+      "checksum_sha256": "ee67659b3b2d994de528e3ad920fc96f35594d0a8044c2b1075c34eb12f8f9ba"
+    }
+  ]
 }
 ```
 - Erreurs: `404 City package not found`.
