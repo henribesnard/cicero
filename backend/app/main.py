@@ -101,6 +101,15 @@ CITY_PACKAGES = {
 }
 
 
+def _translated_monument(monument: dict, lang: str) -> dict:
+    translation = monument["translations"].get(lang) or monument["translations"]["fr"]
+    return {
+        "name": translation["name"],
+        "description": translation["description"],
+        "lang": lang if lang in monument["translations"] else "fr",
+    }
+
+
 @app.get("/health")
 def health(request: Request) -> dict:
     return {"request_id": request.state.request_id, "status": "ok"}
@@ -112,7 +121,7 @@ def get_monument(request: Request, monument_id: str, lang: str = Query(default="
     if monument is None:
         raise HTTPException(status_code=404, detail="Monument not found")
 
-    translation = monument["translations"].get(lang) or monument["translations"]["fr"]
+    translation = _translated_monument(monument, lang)
 
     return {
         "request_id": request.state.request_id,
@@ -125,6 +134,97 @@ def get_monument(request: Request, monument_id: str, lang: str = Query(default="
         "description": translation["description"],
         "practical_info": monument["practical_info"],
         "media": monument["media"],
+    }
+
+
+def _validate_chat_payload(payload: object) -> dict:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid chat payload")
+
+    monument_id = payload.get("monument_id")
+    if not isinstance(monument_id, str) or not monument_id.strip():
+        raise HTTPException(status_code=400, detail="monument_id is required")
+
+    message = payload.get("message")
+    if not isinstance(message, str) or not message.strip():
+        raise HTTPException(status_code=400, detail="message is required")
+
+    history = payload.get("history", [])
+    if not isinstance(history, list):
+        raise HTTPException(status_code=400, detail="history must be a list")
+
+    for entry in history:
+        if not isinstance(entry, dict) or entry.get("role") not in {"user", "assistant"}:
+            raise HTTPException(status_code=400, detail="history entries must be user or assistant messages")
+        content = entry.get("content")
+        if not isinstance(content, str):
+            raise HTTPException(status_code=400, detail="history entries must contain text content")
+
+    lang = payload.get("lang", "fr")
+    if not isinstance(lang, str) or not lang.strip():
+        raise HTTPException(status_code=400, detail="lang must be a non-empty string")
+
+    return payload
+
+
+def _source(monument_id: str, field: str, lang: str) -> dict:
+    return {"monument_id": monument_id, "field": field, "lang": lang}
+
+
+def _build_grounded_chat_answer(
+    monument_id: str, monument: dict, message: str, history: list[dict], lang: str
+) -> tuple[str, list[dict]]:
+    translated = _translated_monument(monument, lang)
+    text = " ".join([entry["content"] for entry in history] + [message]).lower()
+    name = translated["name"]
+    effective_lang = translated["lang"]
+
+    if any(keyword in text for keyword in ["architecture", "architect", "gothique", "style", "décrire", "decrire"]):
+        answer = f"{name} est une {translated['description']} Son type référencé est: {monument['type']}."
+        sources = [
+            _source(monument_id, "description", effective_lang),
+            _source(monument_id, "type", effective_lang),
+        ]
+        return answer, sources
+
+    if any(keyword in text for keyword in ["visite", "visiter", "horaire", "horaires", "ticket", "billet", "prix", "pratique"]):
+        practical_info = monument["practical_info"]
+        answer = (
+            f"Pour {name}, les horaires référencés sont {practical_info['opening_hours']} "
+            f"et l'accès indiqué est: {practical_info['ticket']}."
+        )
+        sources = [
+            _source(monument_id, "practical_info.opening_hours", effective_lang),
+            _source(monument_id, "practical_info.ticket", effective_lang),
+        ]
+        return answer, sources
+
+    if any(keyword in text for keyword in ["date", "construit", "construite", "année", "annee", "quand"]):
+        answer = f"La date de construction référencée pour {name} est {monument['year_built']}."
+        return answer, [_source(monument_id, "year_built", effective_lang)]
+
+    return f"Je ne dispose pas de donnée fiable sur ce point pour {name}.", []
+
+
+@app.post("/v1/chat")
+async def chat(request: Request) -> dict:
+    payload = _validate_chat_payload(await request.json())
+    monument_id = payload["monument_id"]
+    monument = MONUMENTS.get(monument_id)
+    if monument is None:
+        raise HTTPException(status_code=404, detail="Monument not found")
+
+    answer, sources = _build_grounded_chat_answer(
+        monument_id=monument_id,
+        monument=monument,
+        message=payload["message"],
+        history=payload.get("history", []),
+        lang=payload.get("lang", "fr"),
+    )
+    return {
+        "request_id": request.state.request_id,
+        "answer": answer,
+        "sources": sources,
     }
 
 

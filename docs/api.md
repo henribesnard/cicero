@@ -1,7 +1,7 @@
 # Cicero API — Spécification vivante
 
 ## Version
-- v0.4 (API-2 `POST /v1/recognize` + API-5 `GET /v1/cities/{id}/package`)
+- v0.5 (API-4 `POST /v1/chat` RAG minimal sourcé)
 
 ## Règles transverses
 - `GET /health` est public.
@@ -99,5 +99,40 @@
 ```
 - Erreurs: `404 City package not found`.
 
+### `POST /v1/chat`
+- Stories: API-4 / IA-1.
+- Auth: Bearer requise.
+- Implémentation actuelle: RAG déterministe minimal sur la fiche KB locale, sans appel LLM externe.
+- Comportement garanti:
+  - réponse fondée sur les champs récupérés du monument;
+  - `sources` liste les champs utilisés;
+  - si aucune donnée fiable ne correspond à la question, l'assistant le dit et renvoie `sources: []`.
+- Requête:
+```json
+{
+  "monument_id": "notre-dame",
+  "message": "Que sais-tu de son architecture ?",
+  "history": [
+    { "role": "user", "content": "Parlons de la visite." },
+    { "role": "assistant", "content": "..." }
+  ],
+  "lang": "fr"
+}
+```
+- Réponse 200:
+```json
+{
+  "request_id": "<uuid>",
+  "answer": "Notre-Dame de Paris est une Cathédrale gothique emblématique de Paris. Son type référencé est: cathedral.",
+  "sources": [
+    { "monument_id": "notre-dame", "field": "description", "lang": "fr" },
+    { "monument_id": "notre-dame", "field": "type", "lang": "fr" }
+  ]
+}
+```
+- Erreurs:
+  - `400` payload/message/historique/lang invalides.
+  - `404 Monument not found`.
+
 ## Endpoints à implémenter (ordre backlog)
-1. `POST /v1/chat` (API-4, J2)
+- Aucun endpoint J2 restant avant intégration produit hors-ligne; enrichissements à venir: streaming réel et backend RAG/LLM externe pour API-4.
