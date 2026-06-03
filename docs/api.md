@@ -65,7 +65,8 @@
   "model_version": "vision-lite-1.0.0",
   "location": { "lat": 48.853, "lng": 2.3499, "accuracy_m": 8 },
   "heading_deg": 215,
-  "radius_m": 300
+  "radius_m": 300,
+  "city_id": "paris"
 }
 ```
 > `embedding` doit contenir exactement 256 nombres; l'exemple ci-dessus est abrégé.
@@ -83,6 +84,8 @@
   ]
 }
 ```
+- `city_id` est optionnel mais, s'il est fourni, il doit être non vide; il sert uniquement à la journalisation agrégée des cas difficiles.
+- Journalisation ML-4: les réponses `low_confidence` et `not_found` sont ajoutées à une file locale `hard-cases-v1` avec `request_id`, statut, score, `model_version`, `city_id` optionnel et candidat éventuel. Aucune image, embedding brut ni position précise n'est stocké.
 - Erreurs:
   - `400` payload/embedding/localisation/cap invalides.
   - `409 Incompatible model_version` si la version modèle n'est pas supportée.

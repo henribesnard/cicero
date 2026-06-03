@@ -7,6 +7,8 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from app.hard_case_logger import HARD_CASE_STATUSES, HardCaseLogger
+
 app = FastAPI(title="Cicero API", version="0.1.0")
 
 AUTH_BEARER_TOKEN = os.getenv("CICERO_API_BEARER_TOKEN", "dev-token")
@@ -21,6 +23,7 @@ SUPPORTED_CONTENT_LANGS = ("fr", "en")
 CHAT_HISTORY_MAX_MESSAGES = 12
 CHAT_HISTORY_RETENTION = "session_only_client_side"
 _request_windows: dict[str, deque[float]] = defaultdict(deque)
+HARD_CASE_LOGGER = HardCaseLogger(max_records=500)
 
 
 @app.middleware("http")
@@ -308,6 +311,10 @@ def _validate_recognize_payload(payload: object) -> dict:
     if not isinstance(radius_m, (int, float)) or isinstance(radius_m, bool) or radius_m <= 0:
         raise HTTPException(status_code=400, detail="radius_m must be positive")
 
+    city_id = payload.get("city_id")
+    if city_id is not None and (not isinstance(city_id, str) or not city_id.strip()):
+        raise HTTPException(status_code=400, detail="city_id must be a non-empty string when provided")
+
     return payload
 
 
@@ -318,6 +325,22 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     if norm_a == 0 or norm_b == 0:
         return 0.0
     return max(0.0, min(1.0, dot / (norm_a * norm_b)))
+
+
+def _record_hard_case(request: Request, payload: dict, status: str, scored_matches: list[dict]) -> None:
+    """Queue privacy-safe metadata for ML-4 when recognition is uncertain or missing."""
+    if status not in HARD_CASE_STATUSES:
+        return
+
+    best_match = scored_matches[0] if scored_matches else None
+    HARD_CASE_LOGGER.record(
+        scan_id=request.state.request_id,
+        status=status,
+        score=best_match["confidence"] if best_match is not None else 0.0,
+        model_version=payload["model_version"],
+        city_id=payload.get("city_id"),
+        candidate_monument_id=best_match["monument_id"] if best_match is not None else None,
+    )
 
 
 @app.post("/v1/recognize")
@@ -347,6 +370,8 @@ async def recognize(request: Request) -> dict:
         status = "matched"
     else:
         status = "low_confidence"
+
+    _record_hard_case(request, payload, status, scored_matches)
 
     return {
         "request_id": request.state.request_id,
