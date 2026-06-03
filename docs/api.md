@@ -1,7 +1,7 @@
 # Cicero API — Spécification vivante
 
 ## Version
-- v0.6 (OFF-1 manifeste enrichi du paquet hors-ligne)
+- v0.7 (OFF-2 contrat de bundle local hors-ligne)
 
 ## Règles transverses
 - `GET /health` est public.
@@ -119,6 +119,54 @@
 }
 ```
 - Erreurs: `404 City package not found`.
+
+## Contrat client hors-ligne OFF-2
+
+Le téléchargement d'un paquet ville produit un bundle local dérivé du manifeste `GET /v1/cities/{id}/package`.
+Ce bundle est conçu pour être lu sans réseau par le client mobile.
+
+Structure logique validée par tests:
+```json
+{
+  "city_id": "paris",
+  "package_version": "2026.06.03-1",
+  "model_version": "vision-lite-1.0.0",
+  "lang": "fr",
+  "capabilities": {
+    "recognition": true,
+    "monument_cards": true,
+    "chat": false,
+    "chat_unavailable_message": "Le chat nécessite une connexion réseau."
+  },
+  "embeddings_index": [
+    {
+      "monument_id": "notre-dame",
+      "model_version": "vision-lite-1.0.0",
+      "embedding": [1.0]
+    }
+  ],
+  "monument_cards": [
+    {
+      "monument_id": "notre-dame",
+      "name": "Notre-Dame de Paris",
+      "type": "cathedral",
+      "location": { "lat": 48.853, "lng": 2.3499 },
+      "year_built": 1163,
+      "architect": "Maurice de Sully",
+      "description": "Cathédrale gothique emblématique de Paris.",
+      "practical_info": { "opening_hours": "09:00-18:00", "ticket": "free" },
+      "media": [{ "type": "image", "url": "https://example.com/notre-dame.jpg" }],
+      "lang": "fr"
+    }
+  ]
+}
+```
+> L'exemple abrège `embedding`; le bundle réel conserve 256 dimensions.
+
+Comportements locaux validés:
+- reconnaissance depuis `embeddings_index` avec les mêmes statuts que `POST /v1/recognize`: `matched`, `low_confidence`, `not_found`;
+- lecture de fiche depuis `monument_cards` sans appel API;
+- chat explicitement indisponible hors-ligne via `capabilities.chat=false`.
 
 ### `POST /v1/chat`
 - Stories: API-4 / IA-1.
