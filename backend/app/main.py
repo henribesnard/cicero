@@ -7,7 +7,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.hard_case_logger import HARD_CASE_STATUSES, HardCaseLogger
+from app.hard_case_logger import ALLOWED_FEEDBACK_LABELS, HARD_CASE_STATUSES, HardCaseLogger
 
 app = FastAPI(title="Cicero API", version="0.1.0")
 
@@ -23,7 +23,7 @@ SUPPORTED_CONTENT_LANGS = ("fr", "en")
 CHAT_HISTORY_MAX_MESSAGES = 12
 CHAT_HISTORY_RETENTION = "session_only_client_side"
 _request_windows: dict[str, deque[float]] = defaultdict(deque)
-HARD_CASE_LOGGER = HardCaseLogger(max_records=500)
+HARD_CASE_LOGGER = HardCaseLogger(max_records=500, storage_path=os.getenv("CICERO_HARD_CASES_JSONL_PATH"))
 
 
 @app.middleware("http")
@@ -95,6 +95,8 @@ MONUMENTS = {
 REFERENCE_EMBEDDINGS = {
     "notre-dame": [1.0] + [0.0] * (EMBEDDING_DIMENSION - 1),
 }
+
+EARTH_RADIUS_M = 6_371_000
 
 CITY_PACKAGES = {
     "paris": {
@@ -327,6 +329,16 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return max(0.0, min(1.0, dot / (norm_a * norm_b)))
 
 
+def _distance_meters(origin: dict, target: dict) -> float:
+    """Great-circle distance used by the REC-3 geographic candidate funnel."""
+    lat1 = math.radians(origin["lat"])
+    lat2 = math.radians(target["lat"])
+    delta_lat = lat2 - lat1
+    delta_lng = math.radians(target["lng"] - origin["lng"])
+    a = math.sin(delta_lat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lng / 2) ** 2
+    return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
+
+
 def _record_hard_case(request: Request, payload: dict, status: str, scored_matches: list[dict]) -> None:
     """Queue privacy-safe metadata for ML-4 when recognition is uncertain or missing."""
     if status not in HARD_CASE_STATUSES:
@@ -347,18 +359,25 @@ def _record_hard_case(request: Request, payload: dict, status: str, scored_match
 async def recognize(request: Request) -> dict:
     payload = _validate_recognize_payload(await request.json())
     embedding = payload["embedding"]
+    origin = payload["location"]
+    radius_m = payload.get("radius_m", 300)
 
     scored_matches = []
     for monument_id, reference_embedding in REFERENCE_EMBEDDINGS.items():
+        monument = MONUMENTS[monument_id]
+        distance_m = _distance_meters(origin, monument["location"])
+        if distance_m > radius_m:
+            continue
+
         confidence = _cosine_similarity(embedding, reference_embedding)
         if confidence >= LOW_CONFIDENCE_THRESHOLD:
-            monument = MONUMENTS[monument_id]
             translation = monument["translations"]["fr"]
             scored_matches.append(
                 {
                     "monument_id": monument_id,
                     "name": translation["name"],
                     "confidence": round(confidence, 4),
+                    "distance_m": round(distance_m, 1),
                 }
             )
 
@@ -377,6 +396,49 @@ async def recognize(request: Request) -> dict:
         "request_id": request.state.request_id,
         "matches": scored_matches,
         "status": status,
+    }
+
+
+@app.get("/v1/hard-cases/export")
+def export_hard_cases(request: Request) -> dict:
+    """Return the privacy-safe ML-4 review queue for manual triage/reindexing."""
+    return {
+        "request_id": request.state.request_id,
+        **HARD_CASE_LOGGER.export_retraining_batch(),
+    }
+
+
+def _validate_hard_case_feedback_payload(payload: object) -> dict:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid feedback payload")
+
+    user_feedback = payload.get("user_feedback")
+    if user_feedback not in ALLOWED_FEEDBACK_LABELS:
+        raise HTTPException(status_code=400, detail="user_feedback is not an allowed label")
+
+    notes = payload.get("notes")
+    if notes is not None and (not isinstance(notes, str) or not notes.strip()):
+        raise HTTPException(status_code=400, detail="notes must be a non-empty string when provided")
+
+    return payload
+
+
+@app.post("/v1/hard-cases/{scan_id}/feedback")
+async def annotate_hard_case(request: Request, scan_id: str) -> dict:
+    """Annotate a hard-case scan for manual review and future reindexing decisions."""
+    payload = _validate_hard_case_feedback_payload(await request.json())
+    try:
+        record = HARD_CASE_LOGGER.annotate(
+            scan_id,
+            user_feedback=payload["user_feedback"],
+            notes=payload.get("notes"),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Hard case not found") from None
+
+    return {
+        "request_id": request.state.request_id,
+        "record": record,
     }
 
 

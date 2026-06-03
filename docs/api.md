@@ -1,7 +1,7 @@
 # Cicero API — Spécification vivante
 
 ## Version
-- v1.0 (OFF-3 gestion locale des paquets hors-ligne)
+- v1.0 (ML-4 hard-cases feedback + persistance JSONL optionnelle)
 
 ## Règles transverses
 - `GET /health` est public.
@@ -57,7 +57,8 @@
 - Seuils actuels:
   - `matched`: meilleur score `>= 0.80`
   - `low_confidence`: meilleur score `>= 0.50` et `< 0.80`
-  - `not_found`: aucun match `>= 0.50`
+  - `not_found`: aucun match `>= 0.50`, ou aucun candidat dans `radius_m`
+- Entonnoir géographique REC-3: les candidats sont préfiltrés par distance haversine entre `location` et la position du monument; `distance_m` est retourné pour chaque match.
 - Requête:
 ```json
 {
@@ -79,16 +80,85 @@
     {
       "monument_id": "notre-dame",
       "name": "Notre-Dame de Paris",
-      "confidence": 1.0
+      "confidence": 1.0,
+      "distance_m": 0.0
     }
   ]
 }
 ```
 - `city_id` est optionnel mais, s'il est fourni, il doit être non vide; il sert uniquement à la journalisation agrégée des cas difficiles.
 - Journalisation ML-4: les réponses `low_confidence` et `not_found` sont ajoutées à une file locale `hard-cases-v1` avec `request_id`, statut, score, `model_version`, `city_id` optionnel et candidat éventuel. Aucune image, embedding brut ni position précise n'est stocké.
+- Persistance ML-4 optionnelle: si `CICERO_HARD_CASES_JSONL_PATH` est défini, la file `hard-cases-v1` est rechargée au démarrage et réécrite en JSONL après chaque ajout, annotation ou purge; par défaut elle reste volatile en mémoire pour le MVP.
 - Erreurs:
   - `400` payload/embedding/localisation/cap invalides.
   - `409 Incompatible model_version` si la version modèle n'est pas supportée.
+
+### `GET /v1/hard-cases/export`
+- Story: ML-4.
+- Auth: Bearer requise.
+- Exporte la file locale de cas difficiles pour revue humaine et préparation de réindexation, sans image brute, embedding brut ni position précise.
+- Réponse 200:
+```json
+{
+  "request_id": "<uuid>",
+  "schema_version": "hard-cases-v1",
+  "record_count": 2,
+  "counts_by_status": { "low_confidence": 1, "not_found": 1 },
+  "counts_by_feedback": { "correct": 0, "other": 0, "poor_angle": 0, "too_dark": 0, "unknown": 0, "wrong_monument": 0 },
+  "review_queue": [
+    {
+      "scan_id": "<request_id>",
+      "status": "not_found",
+      "score": 0.0,
+      "created_at": "2026-06-03T00:00:00Z",
+      "model_version": "vision-lite-1.0.0",
+      "city_id": "paris",
+      "candidate_monument_id": null,
+      "user_feedback": null,
+      "notes": null,
+      "review_priority": 75
+    }
+  ],
+  "privacy": {
+    "stores_raw_image": false,
+    "stores_raw_embedding": false,
+    "stores_precise_location": false
+  },
+  "records": []
+}
+```
+> `records` contient la file chronologique complète; `review_queue` est triée par priorité de revue.
+
+### `POST /v1/hard-cases/{scan_id}/feedback`
+- Story: ML-5.
+- Auth: Bearer requise.
+- Annote un cas difficile existant avec un retour humain pour prioriser la revue et préparer une réindexation, sans ajouter d'image brute, d'empreinte brute ni de position précise.
+- Labels autorisés: `correct`, `wrong_monument`, `unknown`, `poor_angle`, `too_dark`, `other`.
+- Requête:
+```json
+{
+  "user_feedback": "wrong_monument",
+  "notes": "confusion façade latérale"
+}
+```
+- Réponse 200:
+```json
+{
+  "request_id": "<uuid>",
+  "record": {
+    "scan_id": "<request_id reconnaissance>",
+    "status": "low_confidence",
+    "score": 0.6,
+    "created_at": "2026-06-03T00:00:00Z",
+    "model_version": "vision-lite-1.0.0",
+    "city_id": "paris",
+    "candidate_monument_id": "notre-dame",
+    "user_feedback": "wrong_monument",
+    "notes": "confusion façade latérale"
+  }
+}
+```
+- Erreurs: `400` payload/label invalides; `404 Hard case not found`.
 
 ### `GET /v1/cities/{id}/package`
 - Stories: API-5 / OFF-1.

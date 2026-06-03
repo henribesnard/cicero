@@ -96,6 +96,51 @@ def test_queue_is_bounded_and_clearable() -> None:
     assert logger.list_records() == []
 
 
+def test_jsonl_storage_persists_records_annotations_and_clear(tmp_path) -> None:
+    storage_path = tmp_path / "hard-cases.jsonl"
+    logger = HardCaseLogger(max_records=10, storage_path=storage_path)
+    logger.record(
+        scan_id="scan-persisted",
+        status="low_confidence",
+        score=0.56789,
+        model_version="vision-lite-1.0.0",
+        city_id="paris",
+        candidate_monument_id="notre-dame",
+        created_at="2026-06-03T15:00:00Z",
+    )
+    logger.annotate("scan-persisted", user_feedback="wrong_monument", notes="révision humaine")
+
+    reloaded = HardCaseLogger(max_records=10, storage_path=storage_path)
+
+    assert reloaded.list_records() == [
+        {
+            "scan_id": "scan-persisted",
+            "status": "low_confidence",
+            "score": 0.5679,
+            "created_at": "2026-06-03T15:00:00Z",
+            "model_version": "vision-lite-1.0.0",
+            "city_id": "paris",
+            "candidate_monument_id": "notre-dame",
+            "user_feedback": "wrong_monument",
+            "notes": "révision humaine",
+        }
+    ]
+    assert reloaded.clear() == 1
+    assert storage_path.read_text(encoding="utf-8") == ""
+
+
+def test_jsonl_storage_respects_max_records_on_reload(tmp_path) -> None:
+    storage_path = tmp_path / "hard-cases.jsonl"
+    writer = HardCaseLogger(max_records=10, storage_path=storage_path)
+    writer.record(scan_id="scan-1", status="not_found", score=0.1, model_version="vision-lite-1.0.0")
+    writer.record(scan_id="scan-2", status="not_found", score=0.2, model_version="vision-lite-1.0.0")
+    writer.record(scan_id="scan-3", status="not_found", score=0.3, model_version="vision-lite-1.0.0")
+
+    reloaded = HardCaseLogger(max_records=2, storage_path=storage_path)
+
+    assert [record["scan_id"] for record in reloaded.list_records()] == ["scan-2", "scan-3"]
+
+
 def test_list_records_can_filter_by_hard_case_status() -> None:
     logger = HardCaseLogger()
     logger.record(scan_id="scan-low", status="low_confidence", score=0.55, model_version="vision-lite-1.0.0")
@@ -104,3 +149,33 @@ def test_list_records_can_filter_by_hard_case_status() -> None:
     assert [record["scan_id"] for record in logger.list_records(status="not_found")] == ["scan-miss"]
     with pytest.raises(ValueError, match="status filter"):
         logger.list_records(status="matched")
+
+
+def test_annotate_updates_existing_hard_case_feedback_without_raw_signals() -> None:
+    logger = HardCaseLogger()
+    logger.record(
+        scan_id="scan-review",
+        status="low_confidence",
+        score=0.57,
+        model_version="vision-lite-1.0.0",
+        city_id="paris",
+        candidate_monument_id="notre-dame",
+    )
+
+    annotated = logger.annotate("scan-review", user_feedback="wrong_monument", notes="façade confondue")
+    exported = logger.export_retraining_batch()
+
+    assert annotated["user_feedback"] == "wrong_monument"
+    assert annotated["notes"] == "façade confondue"
+    assert exported["counts_by_feedback"]["wrong_monument"] == 1
+    assert exported["records"] == [annotated]
+
+
+def test_annotate_rejects_unknown_scan_and_invalid_feedback() -> None:
+    logger = HardCaseLogger()
+    logger.record(scan_id="scan-known", status="not_found", score=0.0, model_version="vision-lite-1.0.0")
+
+    with pytest.raises(KeyError, match="Hard case not found"):
+        logger.annotate("scan-missing", user_feedback="unknown")
+    with pytest.raises(ValueError, match="user_feedback is not an allowed label"):
+        logger.annotate("scan-known", user_feedback="invalid-label")
