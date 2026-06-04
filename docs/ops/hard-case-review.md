@@ -216,4 +216,12 @@ curl -sS -X POST "http://localhost:8000/v1/hard-cases/${SCAN_ID}/feedback" \
 
 - Export CSV, revue, validation CSV et synthèse CSV → JSON: légers, acceptables en mode RAM basse.
 - Réindexation, génération d'embeddings ou appels modèle payants: ne pas lancer automatiquement; noter `Besoin update quota manuel Henri` avant exécution.
-- Si disque racine dépasse 70%, faire uniquement un ménage non destructif proposé/validé; ne pas toucher au serveur web.
+- Si disque racine atteint ou dépasse 70%, faire uniquement un diagnostic non destructif avant toute décision; ne pas toucher au serveur web.
+- Diagnostic recommandé:
+
+```bash
+cd backend
+python tools/report_safe_cleanup_candidates.py --json
+```
+
+Le rapport reste `report-only`, exclut les chemins web/serveur, expose `reserve_10_percent_free_gb` et renseigne `recommended_manual_actions` si le disque est au-dessus du seuil 70% ou si l'espace libre passe sous la réserve de 10%.

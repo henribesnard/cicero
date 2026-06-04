@@ -337,5 +337,36 @@ Contraintes validées:
   - `400` payload/message/historique/lang invalides.
   - `404 Monument not found`.
 
+## Rapport de contrôles SEC-2
+
+Outil read-only: `backend/tools/report_privacy_retention_controls.py`.
+
+But: produire un artefact JSON vérifiable pour revue RGPD pré-production, sans parcourir de données utilisateur.
+
+Contrôles couverts:
+- chat: historique non persisté serveur, rétention `session_only_client_side`, contexte borné à 12 messages;
+- carnet local: conservation cible 365 jours, purge sélective `purge_before(cutoff)`, effacement complet `clear()`;
+- hard cases ML-4: file bornée à 500 enregistrements, effacement complet `clear()`, métadonnées uniquement (`stores_raw_image=false`, `stores_raw_embedding=false`, `stores_precise_location=false`).
+
+Commande:
+```bash
+python tools/report_privacy_retention_controls.py --pretty
+```
+
+Signal de préparation: `readiness.sec_2_minimum_controls_present=true` quand les garde-fous code minimaux sont présents. La mise en production reste conditionnée à la revue manuelle: wording politique de confidentialité, identité utilisateur pour compte/sync, SLA d'effacement.
+
+## Diagnostic VPS non destructif
+
+Outil read-only: `backend/tools/report_safe_cleanup_candidates.py`.
+
+But: aider les runs autonomes à rester sûrs sur VPS modeste quand le disque racine approche le seuil opérationnel, sans suppression automatique.
+
+Commande:
+```bash
+python tools/report_safe_cleanup_candidates.py --json
+```
+
+Signaux exposés: `disk`, `total_candidate_size_mb`, `reserve_10_percent_free_gb`, `recommended_manual_actions`. Le mode reste `report-only`; les chemins web/serveur (`/var/www`, `/srv/www`, `/srv/http`, `/etc/nginx`, `/etc/apache2`) sont exclus des candidats.
+
 ## Endpoints à implémenter (ordre backlog)
 - Aucun endpoint J2 restant avant intégration produit hors-ligne; enrichissements à venir: streaming réel et backend RAG/LLM externe pour API-4.

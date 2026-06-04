@@ -106,12 +106,25 @@ def build_report(candidates: Iterable[Path] = DEFAULT_CANDIDATES) -> dict[str, A
         rows.append(CleanupCandidate(str(candidate), candidate.exists(), size_mb, note))
 
     rows.sort(key=lambda row: row.size_mb, reverse=True)
+    disk = disk_status(Path("/"))
+    reserve_10_percent_free_gb = round(disk["total_gb"] * 0.10, 2)
+    recommended_manual_actions = []
+    if disk["used_percent"] >= 70.0:
+        recommended_manual_actions.append(
+            "Disk at or above 70%: review top cache/log/temp candidates before any manual cleanup."
+        )
+    if disk["free_gb"] < reserve_10_percent_free_gb:
+        recommended_manual_actions.append(
+            "Free disk is below the 10% reserve: avoid new downloads/build artifacts until space is recovered."
+        )
     return {
         "schema_version": "safe-cleanup-candidates-v1",
         "mode": "report-only",
-        "disk": disk_status(Path("/")),
+        "disk": disk,
         "candidates": [row.__dict__ for row in rows],
         "total_candidate_size_mb": sum(row.size_mb for row in rows),
+        "reserve_10_percent_free_gb": reserve_10_percent_free_gb,
+        "recommended_manual_actions": recommended_manual_actions,
         "guardrails": [
             "No deletion is performed by this script.",
             "Web/server paths are excluded from candidates.",
