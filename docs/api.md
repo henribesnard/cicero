@@ -1,7 +1,7 @@
 # Cicero API — Spécification vivante
 
 ## Version
-- v1.0 (ML-4 hard-cases feedback + persistance JSONL optionnelle)
+- v1.0 (ML-4 hard-cases feedback + persistance JSONL optionnelle + rapports ops guardrails)
 
 ## Règles transverses
 - `GET /health` est public.
@@ -357,16 +357,19 @@ Signal de préparation: `readiness.sec_2_minimum_controls_present=true` quand le
 
 ## Diagnostic VPS non destructif
 
-Outil read-only: `backend/tools/report_safe_cleanup_candidates.py`.
+Outils read-only:
+- `backend/tools/report_vps_health.py` — santé cron légère: charge, RAM, disque, statut `normal|light`.
+- `backend/tools/report_safe_cleanup_candidates.py` — candidats conservateurs de ménage disque, sans suppression.
+- `backend/tools/report_ops_guardrails.py` — synthèse unique `health + cleanup candidates` pour les rapports autonomes.
 
-But: aider les runs autonomes à rester sûrs sur VPS modeste quand le disque racine approche le seuil opérationnel, sans suppression automatique.
+But: aider les runs autonomes à rester sûrs sur VPS modeste quand la RAM libre est basse ou que le disque racine approche le seuil opérationnel, sans suppression automatique.
 
 Commande:
 ```bash
-python tools/report_safe_cleanup_candidates.py --json
+python tools/report_ops_guardrails.py --top-cleanup 3 --min-cleanup-size-mb 100
 ```
 
-Signaux exposés: `disk`, `total_candidate_size_mb`, `reserve_10_percent_free_gb`, `recommended_manual_actions`. Le mode reste `report-only`; les chemins web/serveur (`/var/www`, `/srv/www`, `/srv/http`, `/etc/nginx`, `/etc/apache2`) sont exclus des candidats.
+Signaux exposés: `health.status`, `health.memory`, `health.disk`, `cleanup.total_candidate_size_mb`, `cleanup.actionable_candidates`, `summary.recommendations`. Le mode reste `report-only`; les chemins web/serveur (`/var/www`, `/srv/www`, `/srv/http`, `/etc/nginx`, `/etc/apache2`) sont exclus des candidats.
 
 ## Endpoints à implémenter (ordre backlog)
 - Aucun endpoint J2 restant avant intégration produit hors-ligne; enrichissements à venir: streaming réel et backend RAG/LLM externe pour API-4.

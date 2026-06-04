@@ -74,3 +74,18 @@ def test_build_report_marks_web_path_without_sizing(monkeypatch):
     assert calls == [Path("/tmp/cache")]
     assert report["candidates"][1]["path"] == "/var/www/html"
     assert report["candidates"][1]["note"] == "excluded: web/server path"
+
+
+def test_actionable_candidates_filters_noise_and_limits_rows():
+    report = {
+        "candidates": [
+            {"path": "/big", "exists": True, "size_mb": 100, "note": "candidate: inspect before manual cleanup"},
+            {"path": "/tiny", "exists": True, "size_mb": 1, "note": "candidate: inspect before manual cleanup"},
+            {"path": "/missing", "exists": False, "size_mb": 50, "note": "missing or empty"},
+            {"path": "/var/www/html", "exists": True, "size_mb": 999, "note": "excluded: web/server path"},
+        ]
+    }
+
+    assert cleanup.actionable_candidates(report, min_size_mb=10, limit=1) == [
+        {"path": "/big", "exists": True, "size_mb": 100, "note": "candidate: inspect before manual cleanup"}
+    ]

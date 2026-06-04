@@ -133,9 +133,33 @@ def build_report(candidates: Iterable[Path] = DEFAULT_CANDIDATES) -> dict[str, A
     }
 
 
+def actionable_candidates(report: dict[str, Any], min_size_mb: int = 1, limit: int | None = None) -> list[dict[str, Any]]:
+    """Return cleanup candidates worth reviewing, without changing report data.
+
+    Excluded, missing, empty, and tiny paths are useful audit data but create
+    noise in a cron report. This helper keeps the full JSON schema intact while
+    making the command-line summary directly actionable for a low-quota VPS.
+    """
+    rows = [
+        row
+        for row in report["candidates"]
+        if row["exists"] and row["size_mb"] >= min_size_mb and not row["note"].startswith("excluded:")
+    ]
+    if limit is not None:
+        return rows[:limit]
+    return rows
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Report safe disk cleanup candidates without deleting anything.")
     parser.add_argument("--json", action="store_true", help="Print full JSON report.")
+    parser.add_argument("--top", type=int, default=5, help="Number of actionable candidates to print in text mode.")
+    parser.add_argument(
+        "--min-size-mb",
+        type=int,
+        default=1,
+        help="Minimum candidate size shown in text mode; JSON still includes every candidate.",
+    )
     parser.add_argument(
         "--path",
         action="append",
@@ -158,7 +182,7 @@ def main() -> int:
         f"safe cleanup report: disk {disk['used_percent']}% used, "
         f"{report['total_candidate_size_mb']} MiB candidate(s), report-only"
     )
-    for row in report["candidates"][:5]:
+    for row in actionable_candidates(report, min_size_mb=args.min_size_mb, limit=args.top):
         print(f"- {row['size_mb']} MiB\t{row['path']}\t{row['note']}")
     return 0
 
