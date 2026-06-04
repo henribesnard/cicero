@@ -14,9 +14,11 @@ from typing import Any
 
 try:  # Script execution from backend/tools
     import report_safe_cleanup_candidates as cleanup
+    import report_cleanup_review_plan as cleanup_plan
     import report_vps_health as health
 except ModuleNotFoundError:  # Package import from tests
     from tools import report_safe_cleanup_candidates as cleanup
+    from tools import report_cleanup_review_plan as cleanup_plan
     from tools import report_vps_health as health
 
 
@@ -30,6 +32,11 @@ def build_report(
     """Return a combined, report-only ops guardrail report."""
     health_report = health.build_report(disk_path=disk_path)
     cleanup_report = cleanup.build_report(cleanup_paths or cleanup.DEFAULT_CANDIDATES)
+    review_plan = cleanup_plan.build_plan(
+        min_size_mb=min_cleanup_size_mb,
+        limit=top_cleanup,
+        candidate_paths=cleanup_paths,
+    )
     actionable = cleanup.actionable_candidates(
         cleanup_report,
         min_size_mb=min_cleanup_size_mb,
@@ -57,18 +64,53 @@ def build_report(
             "recommended_manual_actions": cleanup_report["recommended_manual_actions"],
             "guardrails": cleanup_report["guardrails"],
         },
+        "cleanup_review_plan": {
+            "schema_version": review_plan["schema_version"],
+            "mode": review_plan["mode"],
+            "review_item_count": review_plan["review_item_count"],
+            "review_items": review_plan["review_items"],
+            "guardrails": review_plan["guardrails"],
+        },
         "summary": {
             "status": health_report["status"],
             "cleanup_review_needed": health_report["cleanup_review_needed"] or bool(actionable),
             "actionable_cleanup_count": len(actionable),
+            "manual_review_item_count": review_plan["review_item_count"],
             "recommendations": recommendations,
         },
+    }
+
+
+def build_compact_summary(report: dict[str, Any]) -> dict[str, Any]:
+    """Return only cron-decision fields from a full ops guardrail report."""
+    health_report = report["health"]
+    cleanup_report = report["cleanup"]
+    review_plan = report["cleanup_review_plan"]
+
+    return {
+        "schema_version": "ops-guardrails-compact-v1",
+        "mode": report["mode"],
+        "status": report["summary"]["status"],
+        "vps": {
+            "ram_free_mb": health_report["memory"]["free_mb"],
+            "ram_available_mb": health_report["memory"].get("available_mb"),
+            "disk_used_percent": health_report["disk"]["used_percent"],
+            "cleanup_review_needed": report["summary"]["cleanup_review_needed"],
+        },
+        "cleanup": {
+            "total_candidate_size_mb": cleanup_report["total_candidate_size_mb"],
+            "actionable_count": report["summary"]["actionable_cleanup_count"],
+            "manual_review_item_count": report["summary"]["manual_review_item_count"],
+            "top_review_paths": [item["path"] for item in review_plan["review_items"]],
+        },
+        "recommendations": report["summary"]["recommendations"],
     }
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Report combined Cicero VPS ops guardrails without changing anything.")
     parser.add_argument("--json", action="store_true", help="Print full JSON report.")
+    parser.add_argument("--compact-json", action="store_true", help="Print cron-oriented compact JSON summary.")
     parser.add_argument("--top-cleanup", type=int, default=3, help="Number of cleanup candidates shown in text/summary.")
     parser.add_argument(
         "--min-cleanup-size-mb",
@@ -98,6 +140,9 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
+    if args.compact_json:
+        print(json.dumps(build_compact_summary(report), ensure_ascii=False, separators=(",", ":")))
+        return 0
 
     health_report = report["health"]
     memory = health_report["memory"]
@@ -115,6 +160,11 @@ def main() -> int:
         print(f"- {recommendation}")
     for row in cleanup_summary["actionable_candidates"]:
         print(f"- cleanup {row['size_mb']} MiB\t{row['path']}\t{row['note']}")
+    for item in report["cleanup_review_plan"]["review_items"]:
+        print(
+            f"- review {item['urgency']}\t{item['size_mb']} MiB\t{item['path']}\t"
+            f"{item['category']}\trisk={item['cleanup_risk']}"
+        )
     return 0
 
 
