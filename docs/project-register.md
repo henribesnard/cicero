@@ -9,6 +9,6 @@
 | D5 | Design Cicero | `docs/design/` | **Reçu et extrait** | Agent Mobile |
 | D6 | Charte agents | `docs/source/cicero-charte-agents.md` | À jour | Hermès |
 | D7 | ADR | `docs/adr/` | Créé (ADR-001) | Architecte |
-| D8 | Spécification API vivante | `docs/api.md` | À jour (v1.0 + ML-4 feedback/persistance JSONL hard cases + export/synthèse/validation/payloads/pipeline ops + fiche Markdown revue + import décisions + capacité revue) | Agent Backend |
-| D9 | Rapports de test | `docs/tests/` | À jour (day-26) | Agent QA |
-| D10 | Rapport quotidien | `docs/journal/` | À jour (day-26) | Hermès |
+| D8 | Spécification API vivante | `docs/api.md` | À jour (v1.0 + ML-4 feedback/persistance JSONL hard cases + export/synthèse/validation/payloads/pipeline ops + fiche Markdown revue + import décisions + capacité revue intégrée pipeline + réinjection batch dry-run) | Agent Backend |
+| D9 | Rapports de test | `docs/tests/` | À jour (day-29) | Agent QA |
+| D10 | Rapport quotidien | `docs/journal/` | À jour (day-29) | Hermès |

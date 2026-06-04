@@ -30,6 +30,9 @@ def test_run_pipeline_writes_all_dry_run_artifacts(tmp_path) -> None:
     assert Path(report["artifacts"]["review_batch_json"]).exists()
     assert Path(report["artifacts"]["review_markdown"]).exists()
     assert Path(report["artifacts"]["feedback_payloads_jsonl"]).exists()
+    assert Path(report["artifacts"]["review_capacity_json"]).exists()
+    assert report["capacity_unresolved_count"] == 1
+    assert report["capacity_budgets"][0]["budget_minutes"] == 30
 
     batch = json.loads(Path(report["artifacts"]["review_batch_json"]).read_text(encoding="utf-8"))
     assert [item["scan_id"] for item in batch["items"]] == ["scan-open"]
@@ -71,4 +74,28 @@ def test_pipeline_cli_prints_compact_report(tmp_path) -> None:
         capture_output=True,
     )
 
-    assert result.stdout == f"pipeline ok: 1 row(s), 1 annotated, 0 selected, 1 payload(s) to {output_dir}\n"
+    assert result.stdout == f"pipeline ok: 1 row(s), 1 annotated, 0 selected, capacity 0 unresolved, 1 payload(s) to {output_dir}\n"
+
+
+def test_pipeline_cli_rejects_invalid_capacity_budgets(tmp_path) -> None:
+    input_csv = tmp_path / "review.csv"
+    output_dir = tmp_path / "ops-out"
+    _write_csv(input_csv, [_valid_row(scan_id="scan-cli")])
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "tools/run_hard_case_review_pipeline.py",
+            str(input_csv),
+            str(output_dir),
+            "--capacity-budgets",
+            "30,zero",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == "pipeline invalid: --capacity-budgets must contain positive comma-separated integers\n"
+    assert not output_dir.exists()

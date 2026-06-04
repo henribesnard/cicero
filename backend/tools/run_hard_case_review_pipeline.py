@@ -20,6 +20,7 @@ if __package__ is None or __package__ == "":
 
 from tools.prepare_hard_case_feedback_payloads import build_payloads
 from tools.export_hard_case_review_markdown import export_review_markdown
+from tools.report_hard_case_review_capacity import DEFAULT_BUDGETS, report_review_capacity
 from tools.select_hard_case_review_batch import select_review_batch
 from tools.summarize_hard_cases_csv import summarize_csv
 from tools.validate_hard_cases_csv import validate_csv
@@ -35,6 +36,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-limit", type=int, default=20, help="Maximum unresolved rows in review batch")
     parser.add_argument("--max-per-city", type=int, default=8, help="Maximum selected rows per city bucket")
     parser.add_argument("--max-per-status", type=int, default=12, help="Maximum selected rows per status bucket")
+    parser.add_argument(
+        "--capacity-budgets",
+        default=",".join(str(value) for value in DEFAULT_BUDGETS),
+        help="Comma-separated review-capacity budgets in minutes (default: 30,60,120)",
+    )
     parser.add_argument(
         "--require-all-annotated",
         action="store_true",
@@ -56,6 +62,7 @@ def run_pipeline(
     batch_limit: int = 20,
     max_per_city: int = 8,
     max_per_status: int = 12,
+    capacity_budgets: list[int] | None = None,
     require_all_annotated: bool = False,
 ) -> dict[str, Any]:
     """Create all local dry-run artifacts and return a compact ops report."""
@@ -64,6 +71,7 @@ def run_pipeline(
     batch_path = output_dir / "hard-case-review-batch.json"
     payloads_path = output_dir / "hard-case-feedback-payloads.jsonl"
     review_markdown_path = output_dir / "hard-case-review-sheet.md"
+    capacity_path = output_dir / "hard-case-review-capacity.json"
 
     validation = validate_csv(input_csv, require_all_annotated=require_all_annotated)
     report: dict[str, Any] = {
@@ -88,6 +96,7 @@ def run_pipeline(
     )
     payloads = build_payloads(input_csv, payloads_path, require_all_annotated=require_all_annotated)
     review_markdown = export_review_markdown(batch_path, review_markdown_path)
+    capacity = report_review_capacity(input_csv, capacity_path, budgets=capacity_budgets)
 
     report.update(
         {
@@ -95,11 +104,14 @@ def run_pipeline(
             "annotated_count": validation["annotated_count"],
             "selected_review_count": batch["selected_count"],
             "payload_count": payloads["payload_count"],
+            "capacity_unresolved_count": capacity["unresolved_count"],
+            "capacity_budgets": capacity["budgets"],
             "artifacts": {
                 "summary_json": str(summary_path),
                 "review_batch_json": str(batch_path),
                 "review_markdown": str(review_markdown_path),
                 "feedback_payloads_jsonl": str(payloads_path),
+                "review_capacity_json": str(capacity_path),
             },
             "review_markdown_item_count": review_markdown["item_count"],
             "top_city_status_pairs": summary["top_city_status_pairs"],
@@ -110,6 +122,13 @@ def run_pipeline(
 
 def main() -> int:
     args = parse_args()
+    try:
+        capacity_budgets = [int(value.strip()) for value in args.capacity_budgets.split(",") if value.strip()]
+        if not capacity_budgets or any(value <= 0 for value in capacity_budgets):
+            raise ValueError
+    except ValueError:
+        print("pipeline invalid: --capacity-budgets must contain positive comma-separated integers")
+        return 2
     report = run_pipeline(
         args.input_csv,
         args.output_dir,
@@ -117,6 +136,7 @@ def main() -> int:
         batch_limit=args.batch_limit,
         max_per_city=args.max_per_city,
         max_per_status=args.max_per_status,
+        capacity_budgets=capacity_budgets,
         require_all_annotated=args.require_all_annotated,
     )
     if args.json:
@@ -126,6 +146,7 @@ def main() -> int:
             f"pipeline ok: {report['record_count']} row(s), "
             f"{report['annotated_count']} annotated, "
             f"{report['selected_review_count']} selected, "
+            f"capacity {report['capacity_unresolved_count']} unresolved, "
             f"{report['payload_count']} payload(s) to {args.output_dir}"
         )
     else:

@@ -103,15 +103,16 @@ hard-case-summary.json
 hard-case-review-batch.json
 hard-case-review-sheet.md
 hard-case-feedback-payloads.jsonl
+hard-case-review-capacity.json
 ```
 
 Sortie compacte attendue:
 
 ```text
-pipeline ok: 42 row(s), 18 annotated, 20 selected, 18 payload(s) to /tmp/cicero-hardcase-ops
+pipeline ok: 42 row(s), 18 annotated, 20 selected, capacity 24 unresolved, 18 payload(s) to /tmp/cicero-hardcase-ops
 ```
 
-Le pipeline exécute `validate → summarize → select-batch → export-review-markdown → prepare-payloads`; si la validation échoue, aucun artefact métier n'est écrit. Le batch JSON inclut `review_effort_minutes` par cas et `estimated_review_effort_minutes` au total pour dimensionner une session de revue sans inspecter d'image ni lancer de modèle. Il reste volontairement sans appel réseau, sans mutation du JSONL source et sans réinjection API. Options utiles: `--batch-limit`, `--max-per-city`, `--max-per-status`, `--require-all-annotated`, `--json`.
+Le pipeline exécute `validate → summarize → select-batch → export-review-markdown → report-capacity → prepare-payloads`; si la validation échoue, aucun artefact métier n'est écrit. Le batch JSON inclut `review_effort_minutes` par cas et `estimated_review_effort_minutes` au total; le rapport capacité dimensionne les sessions 30/60/120 minutes par défaut sans inspecter d'image ni lancer de modèle. Il reste volontairement sans appel réseau, sans mutation du JSONL source et sans réinjection API. Options utiles: `--batch-limit`, `--max-per-city`, `--max-per-status`, `--capacity-budgets 45,90,180`, `--require-all-annotated`, `--json`.
 
 ## Fiche Markdown imprimable
 
@@ -173,7 +174,31 @@ Le rapport exclut les cas déjà résolus (`user_feedback` différent de vide ou
 
 ## Réinjection feedback via API locale
 
-Pour chaque ligne annotée (ajouter le header d'authentification local si l'API est protégée):
+Après génération de `/tmp/cicero-feedback-payloads.jsonl`, valider le batch en dry-run (aucun appel réseau, aucun effet API):
+
+```bash
+python tools/apply_hard_case_feedback_payloads.py /tmp/cicero-feedback-payloads.jsonl
+```
+
+Sortie compacte attendue:
+
+```text
+dry-run ok: 8 feedback payload(s) validated, 0 sent
+```
+
+Réinjection réelle uniquement sur action opérateur explicite, avec URL et jeton Bearer fournis:
+
+```bash
+python tools/apply_hard_case_feedback_payloads.py \
+  /tmp/cicero-feedback-payloads.jsonl \
+  --apply \
+  --base-url http://localhost:8000 \
+  --bearer-token "$CICERO_API_BEARER_TOKEN"
+```
+
+Le script refuse par défaut les champs sensibles (`image`, `embedding`, coordonnées), vérifie les labels, le couple `scan_id`/`path`, les doublons, et n'envoie rien sans `--apply`.
+
+Appel manuel unitaire équivalent, à réserver au debug:
 
 ```bash
 curl -sS -X POST "http://localhost:8000/v1/hard-cases/${SCAN_ID}/feedback" \
