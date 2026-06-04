@@ -123,8 +123,8 @@ def test_build_report_reports_no_candidates_without_destructive_action(monkeypat
     assert report["cleanup"]["guardrails"] == ["No deletion is performed by this script."]
 
 
-def test_build_compact_summary_keeps_only_cron_decision_fields():
-    report = {
+def _compact_report_fixture():
+    return {
         "schema_version": "ops-guardrails-v1",
         "mode": "report-only",
         "health": {
@@ -148,7 +148,9 @@ def test_build_compact_summary_keeps_only_cron_decision_fields():
         },
     }
 
-    compact = ops.build_compact_summary(report)
+
+def test_build_compact_summary_keeps_only_cron_decision_fields():
+    compact = ops.build_compact_summary(_compact_report_fixture())
 
     assert compact == {
         "schema_version": "ops-guardrails-compact-v1",
@@ -168,3 +170,15 @@ def test_build_compact_summary_keeps_only_cron_decision_fields():
         },
         "recommendations": ["Mode léger."],
     }
+
+
+def test_build_markdown_summary_is_short_and_report_only():
+    markdown = ops.build_markdown_summary(_compact_report_fixture())
+
+    assert markdown.startswith("# Rapport ops guardrails")
+    assert "- Statut: `light`" in markdown
+    assert "- RAM: 118 MiB libres / 706 MiB disponibles" in markdown
+    assert "- `/home/hermes/.cache`" in markdown
+    assert "- `/var/log`" in markdown
+    assert "- Mode léger." in markdown
+    assert markdown.endswith("_Mode report-only: aucune suppression ni mutation système._")

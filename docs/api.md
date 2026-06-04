@@ -360,7 +360,7 @@ Signal de préparation: `readiness.sec_2_minimum_controls_present=true` quand le
 Outils read-only:
 - `backend/tools/report_vps_health.py` — santé cron légère: charge, RAM, disque, statut `normal|light`.
 - `backend/tools/report_safe_cleanup_candidates.py` — candidats conservateurs de ménage disque, sans suppression.
-- `backend/tools/report_ops_guardrails.py` — synthèse unique `health + cleanup candidates + cleanup_review_plan` pour les rapports autonomes.
+- `backend/tools/report_ops_guardrails.py` — synthèse unique `health + cleanup candidates + cleanup_review_plan` pour les rapports autonomes, avec sorties texte, JSON compact et Markdown court.
 - `backend/tools/archive_ops_guardrails.py` — snapshot compact JSONL append-only pour suivre l'évolution RAM/disque entre runs.
 - `backend/tools/report_ops_guardrails_trend.py` — tendance read-only des derniers snapshots JSONL, avec deltas RAM/disque et recommandations compactes.
 - `backend/tools/report_cleanup_review_plan.py` — plan manuel par chemin pour les candidats de nettoyage, avec classification, urgence, risque, contrôles recommandés, `allowed_automation=none` et validation humaine obligatoire.
@@ -371,12 +371,13 @@ Commande:
 ```bash
 python tools/report_ops_guardrails.py --top-cleanup 3 --min-cleanup-size-mb 100
 python tools/report_ops_guardrails.py --compact-json --top-cleanup 3 --min-cleanup-size-mb 100
+python tools/report_ops_guardrails.py --markdown --top-cleanup 3 --min-cleanup-size-mb 100
 python tools/archive_ops_guardrails.py --output docs/ops/ops_guardrails_snapshots.jsonl
 python tools/report_ops_guardrails_trend.py --input docs/ops/ops_guardrails_snapshots.jsonl --limit 7
 python tools/report_cleanup_review_plan.py --limit 5 --min-size-mb 100
 ```
 
-Signaux exposés: `health.status`, `health.memory`, `health.disk`, `cleanup.total_candidate_size_mb`, `cleanup.actionable_candidates`, `cleanup_review_plan.review_items`, `summary.manual_review_item_count`, `summary.recommendations`. L'option `--compact-json` expose uniquement les champs décisionnels cron (`status`, RAM, disque, revue nettoyage, recommandations) en JSON minifié. L'archive JSONL ajoute `observed_at`, `status`, `load`, `memory`, `disk`, `cleanup.review_needed`, `cleanup.total_candidate_size_mb`, `cleanup.actionable_candidate_count`. La tendance ajoute `snapshot_count`, fenêtre observée, `memory.min/avg/delta`, `disk.max/delta`, `cleanup.last_review_needed` et recommandations de mode léger/revue manuelle. Le plan de revue ajoute `review_items[]` (`path`, `size_mb`, `category`, `cleanup_risk`, `urgency`, `manual_checks`) et reste `report-only`: aucune suppression, aucune rotation, aucune compression. Les chemins web/serveur (`/var/www`, `/srv/www`, `/srv/http`, `/etc/nginx`, `/etc/apache2`) sont exclus des candidats.
+Signaux exposés: `health.status`, `health.memory`, `health.disk`, `cleanup.total_candidate_size_mb`, `cleanup.actionable_candidates`, `cleanup_review_plan.review_items`, `summary.manual_review_item_count`, `summary.recommendations`. L'option `--compact-json` expose uniquement les champs décisionnels cron (`status`, RAM, disque, revue nettoyage, recommandations) en JSON minifié. L'option `--markdown` rend les mêmes signaux sous forme de mini rapport lisible, incluant chemins à revoir et mention `report-only`. L'archive JSONL ajoute `observed_at`, `status`, `load`, `memory`, `disk`, `cleanup.review_needed`, `cleanup.total_candidate_size_mb`, `cleanup.actionable_candidate_count`. La tendance ajoute `snapshot_count`, fenêtre observée, `memory.min/avg/delta`, `disk.max/delta`, `cleanup.last_review_needed` et recommandations de mode léger/revue manuelle. Le plan de revue ajoute `review_items[]` (`path`, `size_mb`, `category`, `cleanup_risk`, `urgency`, `manual_checks`) et reste `report-only`: aucune suppression, aucune rotation, aucune compression. Les chemins web/serveur (`/var/www`, `/srv/www`, `/srv/http`, `/etc/nginx`, `/etc/apache2`) sont exclus des candidats.
 
 ## Endpoints à implémenter (ordre backlog)
 - Aucun endpoint J2 restant avant intégration produit hors-ligne; enrichissements à venir: streaming réel et backend RAG/LLM externe pour API-4.

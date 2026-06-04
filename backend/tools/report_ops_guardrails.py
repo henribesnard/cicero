@@ -107,10 +107,39 @@ def build_compact_summary(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_markdown_summary(report: dict[str, Any]) -> str:
+    """Return a short human-readable cron summary in Markdown."""
+    compact = build_compact_summary(report)
+    vps = compact["vps"]
+    cleanup_summary = compact["cleanup"]
+
+    lines = [
+        "# Rapport ops guardrails",
+        "",
+        f"- Statut: `{compact['status']}`",
+        f"- RAM: {vps['ram_free_mb']} MiB libres / {vps['ram_available_mb']} MiB disponibles",
+        f"- Disque: {vps['disk_used_percent']}% utilisé",
+        f"- Revue nettoyage requise: {'oui' if vps['cleanup_review_needed'] else 'non'}",
+        f"- Candidats nettoyage: {cleanup_summary['total_candidate_size_mb']} MiB "
+        f"({cleanup_summary['actionable_count']} actionnable(s), "
+        f"{cleanup_summary['manual_review_item_count']} à revoir manuellement)",
+    ]
+
+    if cleanup_summary["top_review_paths"]:
+        lines.extend(["", "## Chemins à revoir"])
+        lines.extend(f"- `{path}`" for path in cleanup_summary["top_review_paths"])
+
+    lines.extend(["", "## Recommandations"])
+    lines.extend(f"- {recommendation}" for recommendation in compact["recommendations"])
+    lines.extend(["", "_Mode report-only: aucune suppression ni mutation système._"])
+    return "\n".join(lines)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Report combined Cicero VPS ops guardrails without changing anything.")
     parser.add_argument("--json", action="store_true", help="Print full JSON report.")
     parser.add_argument("--compact-json", action="store_true", help="Print cron-oriented compact JSON summary.")
+    parser.add_argument("--markdown", action="store_true", help="Print a short Markdown summary for cron reports.")
     parser.add_argument("--top-cleanup", type=int, default=3, help="Number of cleanup candidates shown in text/summary.")
     parser.add_argument(
         "--min-cleanup-size-mb",
@@ -142,6 +171,9 @@ def main() -> int:
         return 0
     if args.compact_json:
         print(json.dumps(build_compact_summary(report), ensure_ascii=False, separators=(",", ":")))
+        return 0
+    if args.markdown:
+        print(build_markdown_summary(report))
         return 0
 
     health_report = report["health"]
