@@ -89,6 +89,7 @@
 - `city_id` est optionnel mais, s'il est fourni, il doit être non vide; il sert uniquement à la journalisation agrégée des cas difficiles.
 - Journalisation ML-4: les réponses `low_confidence` et `not_found` sont ajoutées à une file locale `hard-cases-v1` avec `request_id`, statut, score, `model_version`, `city_id` optionnel et candidat éventuel. Aucune image, embedding brut ni position précise n'est stocké.
 - Persistance ML-4 optionnelle: si `CICERO_HARD_CASES_JSONL_PATH` est défini, la file `hard-cases-v1` est rechargée au démarrage et réécrite en JSONL après chaque ajout, annotation ou purge; par défaut elle reste volatile en mémoire pour le MVP.
+- Runbook ops: `docs/ops/hard-case-review.md` décrit l'export CSV local, la validation du CSV annoté, la synthèse JSON actionnable, la sélection de batch avec estimation d'effort humain, l'export Markdown imprimable, l'import contrôlé des décisions Markdown vers CSV annoté, le rapport de capacité revue 30/60/120 min, la préparation dry-run de payloads feedback, le pipeline local `validate → summarize → select-batch → export-review-markdown → prepare-payloads`, la revue humaine minimale et la réinjection de feedback sans donnée sensible.
 - Erreurs:
   - `400` payload/embedding/localisation/cap invalides.
   - `409 Incompatible model_version` si la version modèle n'est pas supportée.
